@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 
 const api = (path, options = {}) => fetch(`/api${path}`, {
-  headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-  ...options
+  ...options,
+  headers: {
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  }
 });
 
 function App() {
