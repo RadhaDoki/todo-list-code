@@ -2,12 +2,13 @@ pipeline {
     agent any
 
     environment {
-        EC2_USER = credentials('ec2-user')
-        EC2_HOST = credentials('ec2-host')
+        EC2_HOST = '16.112.159.34'
+        EC2_USER = 'ubuntu'
         APP_DIR = 'todo-devops-lab'
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -17,33 +18,52 @@ pipeline {
         stage('Validate') {
             steps {
                 sh '''
-                  test -f backend/Dockerfile
-                  test -f frontend/Dockerfile
-                  test -f deploy/deploy.sh
-                  test -f backend/db/init.sql
-                  test -f backend/db/migrate-email.sql
+                    set -e
+
+                    test -f backend/Dockerfile
+                    test -f frontend/Dockerfile
+                    test -f deploy/deploy.sh
+                    test -f backend/db/init.sql
+                    test -f backend/db/migrate-email.sql
+
+                    echo "Project validation successful."
                 '''
             }
         }
 
         stage('Build Backend Image') {
             steps {
-                sh 'docker build -t todo-backend:${BUILD_NUMBER} ./backend'
+                sh '''
+                    docker build \
+                      -t todo-backend:${BUILD_NUMBER} \
+                      ./backend
+                '''
             }
         }
 
         stage('Build Frontend Image') {
             steps {
-                sh 'docker build -t todo-frontend:${BUILD_NUMBER} ./frontend'
+                sh '''
+                    docker build \
+                      -t todo-frontend:${BUILD_NUMBER} \
+                      ./frontend
+                '''
             }
         }
 
         stage('Deploy Source to EC2') {
             steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
+                sshagent(credentials: ['ec2-deploy-key']) {
                     sh '''
-                      ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "mkdir -p ~/$APP_DIR"
-                      scp -o StrictHostKeyChecking=no -r backend frontend deploy "$EC2_USER@$EC2_HOST:~/$APP_DIR/"
+                        set -e
+
+                        ssh -o StrictHostKeyChecking=no \
+                            "$EC2_USER@$EC2_HOST" \
+                            "mkdir -p ~/$APP_DIR"
+
+                        scp -o StrictHostKeyChecking=no \
+                            -r backend frontend deploy \
+                            "$EC2_USER@$EC2_HOST:~/$APP_DIR/"
                     '''
                 }
             }
@@ -51,10 +71,15 @@ pipeline {
 
         stage('Deploy on EC2') {
             steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
+                sshagent(credentials: ['ec2-deploy-key']) {
                     sh '''
-                      ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" \
-                        "cd ~/$APP_DIR && chmod +x deploy/deploy.sh && ./deploy/deploy.sh"
+                        set -e
+
+                        ssh -o StrictHostKeyChecking=no \
+                            "$EC2_USER@$EC2_HOST" \
+                            "cd ~/$APP_DIR && \
+                             chmod +x deploy/deploy.sh && \
+                             ./deploy/deploy.sh"
                     '''
                 }
             }
@@ -62,10 +87,13 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
+                sshagent(credentials: ['ec2-deploy-key']) {
                     sh '''
-                      ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" \
-                        "curl -fsS http://localhost/api/health"
+                        set -e
+
+                        ssh -o StrictHostKeyChecking=no \
+                            "$EC2_USER@$EC2_HOST" \
+                            "curl -fsS http://localhost/api/health"
                     '''
                 }
             }
@@ -74,7 +102,12 @@ pipeline {
 
     post {
         always {
-            sh 'docker image rm todo-backend:${BUILD_NUMBER} todo-frontend:${BUILD_NUMBER} 2>/dev/null || true'
+            sh '''
+                docker image rm \
+                  todo-backend:${BUILD_NUMBER} \
+                  todo-frontend:${BUILD_NUMBER} \
+                  2>/dev/null || true
+            '''
         }
     }
 }
