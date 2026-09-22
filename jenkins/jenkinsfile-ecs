@@ -1,0 +1,137 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_BACKEND = "${ECR_REGISTRY}/todo-backend"
+        ECR_FRONTEND = "${ECR_REGISTRY}/todo-frontend"
+
+        ECS_CLUSTER = 'todo-ecs-cluster'
+        BACKEND_SERVICE = 'todo-backend'
+        FRONTEND_SERVICE = 'todo-frontend'
+
+        // Configure these in Jenkins or replace with environment-specific values.
+        ECS_EXECUTION_ROLE_ARN = credentials('ecs-execution-role-arn')
+        SECRET_ARN = credentials('todo-app-secret-arn')
+        DB_HOST = credentials('todo-db-host')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                sh '''
+                    set -e
+                    test -f backend/Dockerfile
+                    test -f frontend/Dockerfile
+                    test -f backend/db/init.sql
+                    test -f backend/db/migrate-email.sql
+                    echo "Validation successful"
+                '''
+            }
+        }
+
+        stage('Login to ECR') {
+            steps {
+                sh '''
+                    aws ecr get-login-password --region "$AWS_REGION" |
+                    docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                '''
+            }
+        }
+
+        stage('Build Images') {
+            steps {
+                sh '''
+                    docker build -t "$ECR_BACKEND:$BUILD_NUMBER" ./backend
+                    docker build -t "$ECR_FRONTEND:$BUILD_NUMBER" ./frontend
+                '''
+            }
+        }
+
+        stage('Push Images') {
+            steps {
+                sh '''
+                    docker push "$ECR_BACKEND:$BUILD_NUMBER"
+                    docker push "$ECR_FRONTEND:$BUILD_NUMBER"
+                '''
+            }
+        }
+
+        stage('Render Task Definitions') {
+            steps {
+                sh '''
+                    rm -rf rendered
+                    mkdir -p rendered
+
+                    sed                       -e "s#\${ECS_EXECUTION_ROLE_ARN}#${ECS_EXECUTION_ROLE_ARN}#g"                       -e "s#\${BACKEND_IMAGE}#${ECR_BACKEND}:${BUILD_NUMBER}#g"                       -e "s#\${AWS_REGION}#${AWS_REGION}#g"                       -e "s#\${DB_HOST}#${DB_HOST}#g"                       -e "s#\${SECRET_ARN}#${SECRET_ARN}#g"                       task-definitions/backend.json > rendered/backend.json
+
+                    sed                       -e "s#\${ECS_EXECUTION_ROLE_ARN}#${ECS_EXECUTION_ROLE_ARN}#g"                       -e "s#\${FRONTEND_IMAGE}#${ECR_FRONTEND}:${BUILD_NUMBER}#g"                       -e "s#\${AWS_REGION}#${AWS_REGION}#g"                       task-definitions/frontend.json > rendered/frontend.json
+                '''
+            }
+        }
+
+        stage('Register Task Definitions') {
+            steps {
+                sh '''
+                    set -e
+
+                    aws ecs register-task-definition                       --cli-input-json file://rendered/backend.json                       --region "$AWS_REGION"
+
+                    aws ecs register-task-definition                       --cli-input-json file://rendered/frontend.json                       --region "$AWS_REGION"
+                '''
+            }
+        }
+
+        stage('Deploy ECS Services') {
+            steps {
+                sh '''
+                    set -e
+
+                    BACKEND_TASK_DEF=$(aws ecs describe-task-definition                       --task-definition todo-backend                       --region "$AWS_REGION"                       --query 'taskDefinition.taskDefinitionArn'                       --output text)
+
+                    FRONTEND_TASK_DEF=$(aws ecs describe-task-definition                       --task-definition todo-frontend                       --region "$AWS_REGION"                       --query 'taskDefinition.taskDefinitionArn'                       --output text)
+
+                    aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$BACKEND_SERVICE"                       --task-definition "$BACKEND_TASK_DEF"                       --region "$AWS_REGION"
+
+                    aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$FRONTEND_SERVICE"                       --task-definition "$FRONTEND_TASK_DEF"                       --region "$AWS_REGION"
+                '''
+            }
+        }
+
+        stage('Wait for Stable') {
+            steps {
+                sh '''
+                    aws ecs wait services-stable                       --cluster "$ECS_CLUSTER"                       --services "$BACKEND_SERVICE" "$FRONTEND_SERVICE"                       --region "$AWS_REGION"
+                '''
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    curl -fsS "${ALB_URL%/}/api/health"
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker image rm                   "$ECR_BACKEND:$BUILD_NUMBER"                   "$ECR_FRONTEND:$BUILD_NUMBER"                   2>/dev/null || true
+
+                rm -rf rendered
+            '''
+        }
+    }
+}
+
