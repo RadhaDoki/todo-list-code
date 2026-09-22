@@ -84,7 +84,7 @@ pipeline {
                         -e "s#\${AWS_REGION}#${AWS_REGION}#g" \
                         task-definitions/frontend.json > rendered/frontend.json
 
-                    grep -n "ECS_EXECUTION_ROLE_ARN\|BACKEND_IMAGE\|FRONTEND_IMAGE\|DB_HOST\|SECRET_ARN\|AWS_REGION" rendered/*.json || true
+                    grep -nE 'ECS_EXECUTION_ROLE_ARN|BACKEND_IMAGE|FRONTEND_IMAGE|DB_HOST|SECRET_ARN|AWS_REGION' rendered/*.json || true
                 '''
             }
         }
