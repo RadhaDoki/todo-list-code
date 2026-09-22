@@ -1,0 +1,87 @@
+{
+  "family": "todo-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "${ECS_EXECUTION_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "todo-backend",
+      "image": "${BACKEND_IMAGE}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "${DB_HOST}"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "POSTGRES_DB",
+          "value": "todoapp"
+        },
+        {
+          "name": "POSTGRES_USER",
+          "value": "todoapp"
+        },
+        {
+          "name": "OTP_DELIVERY_MODE",
+          "value": "console"
+        },
+        {
+          "name": "OTP_TTL_MINUTES",
+          "value": "5"
+        },
+        {
+          "name": "OTP_MAX_ATTEMPTS",
+          "value": "5"
+        },
+        {
+          "name": "OTP_RESEND_COOLDOWN_SECONDS",
+          "value": "60"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "${AWS_REGION}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "${SECRET_ARN}:DB_PASSWORD::"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "${SECRET_ARN}:JWT_SECRET::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/todo-backend",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
