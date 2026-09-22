@@ -12,6 +12,8 @@ pipeline {
         ECS_CLUSTER = 'todo-ecs-cluster'
         BACKEND_SERVICE = 'todo-backend'
         FRONTEND_SERVICE = 'todo-frontend'
+        ECS_SUBNET_ID = credentials('ecs-subnet-id')
+        ECS_SECURITY_GROUP_ID = credentials('ecs-security-group-id')
 
         // Configure these in Jenkins or replace with environment-specific values.
         ECS_EXECUTION_ROLE_ARN = credentials('ecs-execution-role-arn')
@@ -124,13 +126,25 @@ PY
                 sh '''
                     set -e
 
+                    if ! aws ecs describe-clusters                       --clusters "$ECS_CLUSTER"                       --region "$AWS_REGION"                       --query 'clusters[0].status'                       --output text 2>/dev/null | grep -q ACTIVE; then
+                        aws ecs create-cluster                       --cluster-name "$ECS_CLUSTER"                       --region "$AWS_REGION"
+                    fi
+
                     BACKEND_TASK_DEF=$(aws ecs describe-task-definition                       --task-definition todo-backend                       --region "$AWS_REGION"                       --query 'taskDefinition.taskDefinitionArn'                       --output text)
 
                     FRONTEND_TASK_DEF=$(aws ecs describe-task-definition                       --task-definition todo-frontend                       --region "$AWS_REGION"                       --query 'taskDefinition.taskDefinitionArn'                       --output text)
 
-                    aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$BACKEND_SERVICE"                       --task-definition "$BACKEND_TASK_DEF"                       --region "$AWS_REGION"
+                    if aws ecs describe-services                       --cluster "$ECS_CLUSTER"                       --services "$BACKEND_SERVICE"                       --region "$AWS_REGION"                       --query 'services[0].serviceName'                       --output text >/dev/null 2>&1; then
+                        aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$BACKEND_SERVICE"                       --task-definition "$BACKEND_TASK_DEF"                       --region "$AWS_REGION"
+                    else
+                        aws ecs create-service                       --cluster "$ECS_CLUSTER"                       --service-name "$BACKEND_SERVICE"                       --task-definition "$BACKEND_TASK_DEF"                       --desired-count 1                       --launch-type FARGATE                       --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNET_ID],securityGroups=[$ECS_SECURITY_GROUP_ID],assignPublicIp=ENABLED}"                       --region "$AWS_REGION"
+                    fi
 
-                    aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$FRONTEND_SERVICE"                       --task-definition "$FRONTEND_TASK_DEF"                       --region "$AWS_REGION"
+                    if aws ecs describe-services                       --cluster "$ECS_CLUSTER"                       --services "$FRONTEND_SERVICE"                       --region "$AWS_REGION"                       --query 'services[0].serviceName'                       --output text >/dev/null 2>&1; then
+                        aws ecs update-service                       --cluster "$ECS_CLUSTER"                       --service "$FRONTEND_SERVICE"                       --task-definition "$FRONTEND_TASK_DEF"                       --region "$AWS_REGION"
+                    else
+                        aws ecs create-service                       --cluster "$ECS_CLUSTER"                       --service-name "$FRONTEND_SERVICE"                       --task-definition "$FRONTEND_TASK_DEF"                       --desired-count 1                       --launch-type FARGATE                       --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNET_ID],securityGroups=[$ECS_SECURITY_GROUP_ID],assignPublicIp=ENABLED}"                       --region "$AWS_REGION"
+                    fi
                 '''
             }
         }
