@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         AWS_REGION = 'ap-south-2'
         AWS_ACCOUNT_ID = credentials('aws-account-id')
@@ -17,6 +21,7 @@ pipeline {
         ECS_EXECUTION_ROLE_ARN = credentials('ecs-execution-role-arn')
         SECRET_ARN = credentials('todo-app-secret-arn')
         DB_HOST = credentials('todo-db-host')
+        ALB_URL = credentials('todo-alb-url')
     }
 
     stages {
