@@ -20,10 +20,6 @@ Create:
   - Secret text
   - The HTTP URL that the ECS frontend task can use to reach the backend, including the port if needed (for example, `http://todo-backend.internal:3000`)
 
-5. `todo-alb-url`
-  - Secret text
-  - Public URL of the ALB used by the smoke test
-
 ## Jenkins agent
 
 Install:
@@ -74,7 +70,7 @@ The application container receives AWS credentials through the EC2 instance meta
 
 ## ECS backend connectivity
 
-The ECS frontend uses Nginx to proxy `/api/*` to the URL in the `todo-backend-url` Jenkins credential. That URL must resolve and be reachable from the frontend task, typically through ECS service discovery or an internal load balancer targeting the backend service. Do not use `http://todo-backend:3000` for ECS; that Docker-network name is only valid in the local `deploy/deploy.sh` deployment.
+The ECS frontend uses Nginx to proxy `/api/*` to the URL in the `todo-backend-url` Jenkins credential. That URL must resolve and be reachable from the frontend task, typically through ECS service discovery or direct private networking. Do not use `http://todo-backend:3000` for ECS; that Docker-network name is only valid in the local `deploy/deploy.sh` deployment.
 
 ## Security group
 

@@ -22,7 +22,6 @@ pipeline {
         SECRET_ARN = credentials('todo-app-secret-arn')
         DB_HOST = credentials('todo-db-host')
         BACKEND_URL = credentials('todo-backend-url')
-        ALB_URL = credentials('todo-alb-url')
     }
 
     stages {
@@ -181,23 +180,6 @@ PY
             }
         }
 
-        stage('Smoke Test') {
-            steps {
-                sh '''
-                    curl -fsS "${ALB_URL%/}/api/health"
-                '''
-            }
-        }
-    }
-
-    post {
-        always {
-            sh '''
-                docker image rm                   "$ECR_BACKEND:$BUILD_NUMBER"                   "$ECR_FRONTEND:$BUILD_NUMBER"                   2>/dev/null || true
-
-                rm -rf rendered
-            '''
-        }
     }
 }
 

@@ -61,6 +61,6 @@ The Jenkins pipeline:
 3. Builds backend and frontend Docker images on the Jenkins agent.
 4. Copies source to EC2.
 5. Runs `deploy/deploy.sh` on EC2.
-6. Runs a health smoke test.
+6. Waits for both ECS services to become stable.
 
 The EC2 `.env` is not stored in GitHub. It remains on the EC2 host.
