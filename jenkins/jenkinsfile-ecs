@@ -16,6 +16,7 @@ pipeline {
         ECS_CLUSTER = 'todo-ecs-cluster'
         BACKEND_SERVICE = 'todo-backend'
         FRONTEND_SERVICE = 'todo-frontend'
+        ECR_IMAGE_TAG = 'latest'
 
         // Configure these in Jenkins or replace with environment-specific values.
         ECS_EXECUTION_ROLE_ARN = credentials('ecs-execution-role-arn')
@@ -44,29 +45,18 @@ pipeline {
             }
         }
 
-        stage('Login to ECR') {
+        stage('Verify Existing ECR Images') {
             steps {
                 sh '''
-                    aws ecr get-login-password --region "$AWS_REGION" |
-                    docker login --username AWS --password-stdin "$ECR_REGISTRY"
-                '''
-            }
-        }
-
-        stage('Build Images') {
-            steps {
-                sh '''
-                    docker build -t "$ECR_BACKEND:$BUILD_NUMBER" ./backend
-                    docker build -t "$ECR_FRONTEND:$BUILD_NUMBER" ./frontend
-                '''
-            }
-        }
-
-        stage('Push Images') {
-            steps {
-                sh '''
-                    docker push "$ECR_BACKEND:$BUILD_NUMBER"
-                    docker push "$ECR_FRONTEND:$BUILD_NUMBER"
+                    set -e
+                    aws ecr describe-images \
+                        --repository-name todo-backend \
+                        --image-ids imageTag="$ECR_IMAGE_TAG" \
+                        --region "$AWS_REGION" >/dev/null
+                    aws ecr describe-images \
+                        --repository-name todo-frontend \
+                        --image-ids imageTag="$ECR_IMAGE_TAG" \
+                        --region "$AWS_REGION" >/dev/null
                 '''
             }
         }
@@ -84,7 +74,7 @@ from pathlib import Path
 
 backend_replacements = {
     "ECS_EXECUTION_ROLE_ARN": os.environ["ECS_EXECUTION_ROLE_ARN"],
-    "BACKEND_IMAGE": f"{os.environ['ECR_BACKEND']}:{os.environ['BUILD_NUMBER']}",
+    "BACKEND_IMAGE": f"{os.environ['ECR_BACKEND']}:{os.environ['ECR_IMAGE_TAG']}",
     "AWS_REGION": os.environ["AWS_REGION"],
     "DB_HOST": os.environ["DB_HOST"],
     "SECRET_ARN": os.environ["SECRET_ARN"],
@@ -92,7 +82,7 @@ backend_replacements = {
 
 frontend_replacements = {
     "ECS_EXECUTION_ROLE_ARN": os.environ["ECS_EXECUTION_ROLE_ARN"],
-    "FRONTEND_IMAGE": f"{os.environ['ECR_FRONTEND']}:{os.environ['BUILD_NUMBER']}",
+    "FRONTEND_IMAGE": f"{os.environ['ECR_FRONTEND']}:{os.environ['ECR_IMAGE_TAG']}",
     "BACKEND_URL": os.environ["BACKEND_URL"].rstrip("/"),
     "AWS_REGION": os.environ["AWS_REGION"],
 }

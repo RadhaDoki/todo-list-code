@@ -20,6 +20,10 @@ Create:
   - Secret text
   - The HTTP URL that the ECS frontend task can use to reach the backend, including the port if needed (for example, `http://todo-backend.internal:3000`)
 
+## Existing ECR images
+
+The ECS pipeline does not build or push Docker images. It verifies and deploys the existing `latest` images from `todo-backend` and `todo-frontend`. Change `ECR_IMAGE_TAG` in `jenkins/jenkinsfile-ecs` if your images use another tag.
+
 ## Jenkins agent
 
 Install:
