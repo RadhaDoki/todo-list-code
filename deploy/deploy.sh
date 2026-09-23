@@ -88,6 +88,7 @@ docker run -d \
   --name todo-frontend \
   --network "$NETWORK" \
   --restart unless-stopped \
+  -e BACKEND_URL="http://todo-backend:3000" \
   -p 80:80 \
   todo-frontend:latest
 

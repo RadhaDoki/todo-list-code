@@ -21,6 +21,7 @@ pipeline {
         ECS_EXECUTION_ROLE_ARN = credentials('ecs-execution-role-arn')
         SECRET_ARN = credentials('todo-app-secret-arn')
         DB_HOST = credentials('todo-db-host')
+        BACKEND_URL = credentials('todo-backend-url')
         ALB_URL = credentials('todo-alb-url')
     }
 
@@ -93,6 +94,7 @@ backend_replacements = {
 frontend_replacements = {
     "ECS_EXECUTION_ROLE_ARN": os.environ["ECS_EXECUTION_ROLE_ARN"],
     "FRONTEND_IMAGE": f"{os.environ['ECR_FRONTEND']}:{os.environ['BUILD_NUMBER']}",
+    "BACKEND_URL": os.environ["BACKEND_URL"].rstrip("/"),
     "AWS_REGION": os.environ["AWS_REGION"],
 }
 
@@ -107,7 +109,18 @@ for key, value in frontend_replacements.items():
 Path("rendered/frontend.json").write_text(frontend)
 PY
 
-                    grep -nE 'ECS_EXECUTION_ROLE_ARN|BACKEND_IMAGE|FRONTEND_IMAGE|DB_HOST|SECRET_ARN|AWS_REGION' rendered/*.json || true
+                    test -n "$BACKEND_URL"
+                    python3 - <<'PY'
+import json
+from pathlib import Path
+
+for path in (Path("rendered/backend.json"), Path("rendered/frontend.json")):
+    document = path.read_text()
+    if "${" in document:
+        raise SystemExit(f"Unresolved placeholder in {path}")
+    json.loads(document)
+PY
+                    grep -nE 'ECS_EXECUTION_ROLE_ARN|BACKEND_IMAGE|FRONTEND_IMAGE|BACKEND_URL|DB_HOST|SECRET_ARN|AWS_REGION' rendered/*.json || true
                 '''
             }
         }
